@@ -6,18 +6,16 @@ Autor: Denis Leonardo Santos
 """
 import rasterio
 import rasterio.mask
-import rasterio.plot
 import rasterio.features
 import fiona
 import openpyxl
 import geopandas as gpd
-from pandas import concat,DataFrame
+from pandas import concat
 from tempfile import mkdtemp
 from shutil import rmtree
 from src.paths import *
 from src.lists import *
 from src.folders import *
-import matplotlib.pyplot as plt
 
 #Criando pasta temporária para salvar resultados intermediários
 temp_dir = mkdtemp()
