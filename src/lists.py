@@ -2,6 +2,10 @@
 
 from src.paths import *
 
+"""
+Listas relevantes para o projeto.
+"""
+
 recibo_car = [
     "MG-3138203-B4B0840A3075430AB0ADEEA7EE37147E",
     "MG-3138203-F854329C8CDF48108A8EDDE9B129E49B",

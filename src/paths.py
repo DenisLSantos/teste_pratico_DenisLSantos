@@ -2,6 +2,10 @@
 
 import os
 
+"""
+Caminhos relevantes para o projeto.
+"""
+
 base_path = os.getcwd()
 
 mapbiomas_2012 = os.path.join(

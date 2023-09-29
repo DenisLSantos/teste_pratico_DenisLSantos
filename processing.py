@@ -9,7 +9,9 @@ import rasterio.mask
 import rasterio.plot
 import rasterio.features
 import fiona
+import openpyxl
 import geopandas as gpd
+from pandas import concat,DataFrame
 from tempfile import mkdtemp
 from shutil import rmtree
 from src.paths import *
@@ -100,20 +102,6 @@ def poligonize(raster: str) -> None:
     #dfg_poly.plot()
     #plt.show()
 
-def vector_save_folder(recibos_car, dfg_recibos):
-    """
-    Função salva as feições vetoriais em suas respectivos diretórios.
-    """
-    for recibo in recibos_car:
-        dfg_recibos.query("COD_IMOVEL in @recibo")
-        dfg_recibos.to_file(
-            os.path.join(
-                output,
-                recibo,
-                "{}.shp".format(recibo)
-            )
-        )
-
 #Abrindo e transformando os dados vetoriais para o mesmo sistema de referência
 dfg_car = gpd.read_file(vector_car_mg).to_crs(31983)
 
@@ -129,21 +117,13 @@ dfg_buffer.to_file(
         "vector_wgs84_buffer.shp"
     )
 )
-dfg_buffer.plot()
 
-vector_save_folder(recibo_car, dfg_car_filter)
-
+#Realizando o recorte das imagens
 for img in images:
     clip_mask(img)
     poligonize(img)
 
-dfg_florest_2012 = gpd.read_file(
-    os.path.join(
-        temp_dir,
-        os.path.basename(mapbiomas_2012).split(".")[0] + "_florest_2012.shp"
-    )
-)
-
+#Importando poligonos dos raster poligonizados de 2012
 dfg_use_2012 = gpd.read_file(
     os.path.join(
         temp_dir,
@@ -152,6 +132,7 @@ dfg_use_2012 = gpd.read_file(
 )\
     .to_crs(31983)
 
+#Importando poligonos dos raster poligonizados de 2022
 dfg_use_2022 = gpd.read_file(
     os.path.join(
         temp_dir,
@@ -160,42 +141,47 @@ dfg_use_2022 = gpd.read_file(
 )\
     .to_crs(31983)
 
+#Realizando intersexção dos usos para observar as mudanças
 inter_usos = dfg_use_2022.overlay(dfg_use_2012, how='intersection')
-conversao = inter_usos.query("raster_val_1 != 3")
-conversao = conversao.query("raster_val_2 == 3")
 
-inter_usos_clip = gpd.clip(inter_usos, dfg_car_filter)
+#Calculando conversao
+inter_usos["conversao_ha"] = inter_usos.area/10000
 
-uso_sjoin = gpd.sjoin(inter_usos_clip, dfg_car_filter)
-uso_sjoin.head()
+#Trocando valores por suas descrições
+#inter_usos = inter_usos.replace({"raster_val_2": mapbiomas_uso})
+#inter_usos = inter_usos.replace({"raster_val_1": mapbiomas_uso})
+resultado = gpd.GeoDataFrame()
 
-resultado = uso_sjoin.dissolve(by = ["COD_IMOVEL", "raster_val_1", "raster_val_2"])
-resultado.to_file(os.path.join(output, "final.shp"))
-#inter_usos_clip.plot()
-#plt.show()
-#plt.close()
+#Calculando atributos solicitados e salvando em suas devidas pastas
+for recibo in recibo_car:
+    dfg_temp = dfg_car_filter.query("COD_IMOVEL in @recibo")
+    inter_usos_clip = gpd.clip(inter_usos, dfg_temp)
+    uso_sjoin = gpd.sjoin(inter_usos_clip, dfg_temp)
+    propriedade = uso_sjoin.rename(columns = {
+        "COD_IMOVEL": "recibo_car",
+        "NOM_MUNICI":"municipio",
+        "COD_ESTADO":"UF",
+        "NUM_AREA": "area_prop",
+        "raster_val_2": "uso_2012",
+        "raster_val_1": "uso_2022",
+        "conversao_ha": "conversao_ha"})
+    propriedade = propriedade.dissolve(by = ["recibo_car", "uso_2012", "uso_2022"])
+    conversao = propriedade.query("uso_2012 == 3")
+    conversao = propriedade.query("uso_2012 == 3")
+    propriedade = propriedade.drop(
+        ["index_right", "NUM_MODULO", "TIPO_IMOVE", "SITUACAO", "CONDICAO_I"],
+        axis = 1)
+    propriedade.to_file(os.path.join(output, recibo, recibo + ".shp"))
+    resultado = concat([resultado, propriedade])
 
-uso_sjoin.replace({"raster_val_1": mapbiomas_uso})
-uso_sjoin.replace({"raster_val_2": mapbiomas_uso})
-
+#Salvando arquivo geral
+resultado.to_file(os.path.join(output, "geral.shp"))
+resultado.to_excel(
+    os.path.join(
+        output,
+        "Relatório_geral.xlsx"
+    )
+)
 
 #Deletando pasta temporária
 rmtree(temp_dir, True)
-
-
-"""df_teste = gpd.read_file(
-    os.path.join(
-        output,
-        "brasil_coverage_2022_use_2022.shp"
-    )
-)
-df_teste.head()
-df_uso["Class_ID"].dtype
-df_teste["raster_val"].dtype
-
-df_teste['raster_val'] = df_teste['raster_val'].astype('int64')
-df_teste["raster_val"].dtype
-
-df_teste = df_teste.merge(df_uso, left_on = "raster_val", right_on = "Class_ID", suffixes=('_geo', '_table'))
-df_teste.head()
-df_teste.dissolve(by = "raster_val")"""
